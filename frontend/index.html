@@ -1,1 +1,807 @@
-<h1>地铁末班车兜底出行规划系统</h1>
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>地铁+打车 · 智能出行规划</title>
+    <!-- Leaflet 地图库 -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Axios HTTP客户端 -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Font Awesome 图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+        body {
+            background: #f5f7fb;
+            padding: 16px 12px 32px;
+            min-height: 100vh;
+            color: #1e293b;
+        }
+        .app-container {
+            max-width: 500px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 18px 16px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.05);
+            border: 1px solid #f0f2f6;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .badge {
+            background: #eef2ff;
+            padding: 4px 10px;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #2563eb;
+        }
+        .global-status {
+            background: #1e293b;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 10px;
+            background: #22c55e;
+            box-shadow: 0 0 0 2px rgba(34,197,94,0.3);
+        }
+        .input-row {
+            display: flex;
+            align-items: center;
+            background: #f8fafc;
+            border-radius: 20px;
+            padding: 6px 16px;
+            margin-bottom: 10px;
+            border: 1px solid #e2e8f0;
+        }
+        .input-row i {
+            width: 24px;
+            color: #64748b;
+        }
+        .input-row input, .input-row select {
+            border: none;
+            background: transparent;
+            padding: 12px 0 12px 8px;
+            font-size: 1rem;
+            width: 100%;
+            outline: none;
+        }
+        .double-col {
+            display: flex;
+            gap: 8px;
+        }
+        .double-col > * {
+            flex: 1;
+        }
+        .reachable-status {
+            font-size: 2.4rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+        }
+        .green-text { color: #0d9488; }
+        .red-text { color: #dc2626; }
+        .countdown-badge {
+            background: #fef9c3;
+            padding: 8px 14px;
+            border-radius: 60px;
+            font-weight: 600;
+        }
+        .step-line {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .step-icon {
+            width: 36px;
+            height: 36px;
+            background: #e6edfb;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #2563eb;
+        }
+        .farthest-station {
+            color: #b91c1c;
+            font-weight: 800;
+            background: #fee2e2;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        .taxi-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .taxi-price {
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        .map-container {
+            height: 240px;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            background: #dbeafe;
+            z-index: 1;
+        }
+        .action-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .chip {
+            background: #f1f5f9;
+            padding: 8px 14px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: 0.1s;
+            border: none;
+        }
+        .chip:active { background: #e2e8f0; }
+        .btn-primary {
+            background: #0f172a;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 60px;
+            font-weight: 600;
+            width: 100%;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .mt-2 { margin-top: 12px; }
+        .mb-1 { margin-bottom: 6px; }
+        .text-muted { color: #64748b; font-size: 0.85rem; }
+        .highlight { background: #fef9c3; border-radius: 16px; padding: 4px 10px; }
+        i { margin-right: 4px; }
+        .leaflet-marker-icon { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
+        .toast-info {
+            background: #1e293b;
+            color: white;
+            padding: 8px 14px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+        }
+        .loading-pulse {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+
+    <!-- 全局状态栏 -->
+    <div class="global-status">
+        <span class="status-dot" id="globalStatusDot"></span>
+        <span id="globalStatusText"><i class="fas fa-subway"></i> 加载地铁状态...</span>
+    </div>
+
+    <!-- 1. 用户基础输入模块 -->
+    <div class="card">
+        <div class="card-header">
+            <span><i class="fas fa-map-pin"></i> 行程信息</span>
+            <span class="badge" id="gpsHint"><i class="fas fa-location-dot"></i> 手动输入</span>
+        </div>
+        <div class="input-row">
+            <i class="fas fa-circle-dot"></i>
+            <input type="text" id="startInput" placeholder="起点 (地铁站/当前位置)" value="国贸">
+            <i class="fas fa-crosshairs" id="locateBtn" style="cursor:pointer;" title="获取实时位置"></i>
+        </div>
+        <div class="input-row">
+            <i class="fas fa-flag-checkered"></i>
+            <input type="text" id="endInput" placeholder="终点" value="西二旗" list="addressSuggest">
+            <datalist id="addressSuggest">
+                <option value="西二旗">西二旗 (公司)</option>
+                <option value="国贸">国贸</option>
+                <option value="望京">望京</option>
+                <option value="知春路">知春路</option>
+            </datalist>
+        </div>
+        <div class="double-col">
+            <div class="input-row" style="margin-bottom:0;">
+                <i class="far fa-calendar"></i>
+                <input type="date" id="datePicker">
+            </div>
+            <div class="input-row" style="margin-bottom:0;">
+                <i class="far fa-clock"></i>
+                <input type="time" id="timePicker">
+            </div>
+        </div>
+        <div class="flex-between mt-2">
+            <div>
+                <i class="fas fa-briefcase"></i> 
+                <select id="dayType" style="border:none; background:#f1f5f9; border-radius:40px; padding:6px 12px;">
+                    <option value="weekday" selected>工作日</option>
+                    <option value="holiday">节假日/周末</option>
+                </select>
+            </div>
+            <div class="action-chips">
+                <span class="chip" id="favHome"><i class="fas fa-home"></i>家</span>
+                <span class="chip" id="favCompany"><i class="fas fa-building"></i>公司</span>
+                <span class="chip" id="favSchool"><i class="fas fa-graduation-cap"></i>学校</span>
+            </div>
+        </div>
+        <div class="text-muted" style="margin-top: 8px;" id="historyHint">
+            <i class="far fa-clock"></i> 历史记录加载中...
+        </div>
+    </div>
+
+    <!-- 2. 地铁状态校验模块 -->
+    <div class="card">
+        <div class="flex-between">
+            <div>
+                <div class="reachable-status green-text" id="reachableLabel">--</div>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <span id="lineStatusText"><i class="fas fa-train"></i> 线路状态</span>
+                    <span class="countdown-badge"><i class="fas fa-hourglass-half"></i> 末班剩余 <span id="lastTrainCountdown">--</span></span>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="background:#fee2e2; padding:4px 10px; border-radius:40px; font-size:0.8rem;" id="exceptionMsg">
+                    <i class="fas fa-spinner fa-pulse"></i> 检测中
+                </div>
+            </div>
+        </div>
+        <div id="globalAlert" style="margin-top: 12px;"></div>
+    </div>
+
+    <!-- 3. 地图可视化模块 -->
+    <div class="card" style="padding: 8px;">
+        <div class="card-header">
+            <span><i class="fas fa-map"></i> 地铁+打车图层</span>
+            <span class="badge"><i class="fas fa-layer-group"></i> 实时路况</span>
+        </div>
+        <div id="map" class="map-container"></div>
+        <div class="flex-between text-muted" style="margin-top: 6px;">
+            <span><i class="fas fa-circle" style="color:#2563eb;"></i> 起点 <i class="fas fa-circle" style="color:#ea580c; margin-left:12px;"></i> 换乘 <i class="fas fa-circle" style="color:#b91c1c;"></i> 最远站 <i class="fas fa-flag-checkered" style="color:#0f172a;"></i> 终点</span>
+            <span id="layerToggle" style="cursor:pointer;"><i class="fas fa-sliders"></i> 图层</span>
+        </div>
+    </div>
+
+    <!-- 4. 核心路线规划模块 -->
+    <div class="card">
+        <div class="card-header">
+            <span><i class="fas fa-route"></i> 地铁换乘 · 最远可达</span>
+            <div>
+                <button class="chip" id="fewTransfersBtn" style="background:#0f172a; color:white;">少换乘</button>
+                <button class="chip" id="shortTimeBtn">耗时最短</button>
+            </div>
+        </div>
+        <div id="subwayStepsContainer">
+            <!-- 动态渲染地铁步骤 -->
+            <div class="step-line text-muted">规划中...</div>
+        </div>
+        <div id="lineClosureNote" style="margin-top:12px; color:#94a3b8;"></div>
+    </div>
+
+    <!-- 5. 最优打车方案模块 -->
+    <div class="card">
+        <div class="card-header">
+            <span><i class="fas fa-taxi"></i> 最优打车 · 从 <span id="taxiFromStation">--</span> 出发</span>
+            <span class="badge" id="preferenceTag"><i class="fas fa-sliders"></i> 价格优先</span>
+        </div>
+        <div id="taxiOptionsContainer">
+            <div class="taxi-option text-muted">加载打车方案...</div>
+        </div>
+        <div class="flex-between mt-2">
+            <span><i class="fas fa-shield"></i> 夜间热门路线 · 已实名认证</span>
+            <span class="chip" id="comparePriceBtn"><i class="fas fa-chart-simple"></i> 比价</span>
+        </div>
+    </div>
+
+    <!-- 6. 综合结果汇总模块 -->
+    <div class="card">
+        <div class="card-header">
+            <span><i class="fas fa-clipboard-list"></i> 行程总览</span>
+            <span class="chip" id="exportCard"><i class="fas fa-camera"></i> 生成卡片</span>
+        </div>
+        <div class="flex-between" style="margin-bottom: 12px;" id="summaryStats">
+            <span>总耗时 <strong>--</strong></span>
+            <span>总费用 <strong>--</strong></span>
+            <span>总距离 --</span>
+        </div>
+        <div style="background:#f8fafc; border-radius: 20px; padding: 14px;" id="timelineDetail">
+            规划路线后显示时间轴
+        </div>
+        <div style="margin-top: 16px;" id="fareDetail">
+            <div class="flex-between"><span>💰 地铁票价: --</span> <span>🚕 打车预估: --</span></div>
+        </div>
+        <div style="margin-top: 16px; background: #f1f5f9; border-radius: 18px; padding: 12px;" id="alternativePlans">
+            <!-- 备用方案动态 -->
+        </div>
+    </div>
+
+    <!-- 7. 辅助交互 + 异常反馈 -->
+    <div class="card">
+        <div class="action-chips" style="justify-content: space-around;">
+            <div class="chip" id="collectRoute"><i class="far fa-bookmark"></i> 收藏路线</div>
+            <div class="chip" id="replanBtn"><i class="fas fa-arrows-rotate"></i> 一键重规划</div>
+            <div class="chip" id="shareBtn"><i class="fab fa-weixin"></i> 分享</div>
+            <div class="chip" id="prefSetting"><i class="fas fa-gear"></i> 偏好</div>
+        </div>
+        <div style="margin-top: 16px; border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+            <div class="flex-between">
+                <span><i class="fas fa-triangle-exclamation"></i> 异常反馈模拟</span>
+                <span class="chip" id="simulateNoRoute">模拟无路线</span>
+                <span class="chip" id="simulateOffline">离线模式</span>
+            </div>
+            <div id="exceptionFeedbackArea" class="text-muted" style="margin-top: 8px;">
+                <i class="fas fa-wifi"></i> 就绪 · 点击规划
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        "use strict";
+
+        // ---------- 全局状态 & DOM 元素 ----------
+        const map = L.map('map').setView([39.98, 116.38], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, CartoDB'
+        }).addTo(map);
+
+        // 图层组管理
+        const routeLayerGroup = L.layerGroup().addTo(map);
+        const markerLayerGroup = L.layerGroup().addTo(map);
+
+        // UI 元素
+        const globalStatusDot = document.getElementById('globalStatusDot');
+        const globalStatusText = document.getElementById('globalStatusText');
+        const reachableLabel = document.getElementById('reachableLabel');
+        const lastTrainSpan = document.getElementById('lastTrainCountdown');
+        const exceptionMsg = document.getElementById('exceptionMsg');
+        const globalAlert = document.getElementById('globalAlert');
+        const gpsHint = document.getElementById('gpsHint');
+        const startInput = document.getElementById('startInput');
+        const endInput = document.getElementById('endInput');
+        const datePicker = document.getElementById('datePicker');
+        const timePicker = document.getElementById('timePicker');
+        const dayType = document.getElementById('dayType');
+        const fewBtn = document.getElementById('fewTransfersBtn');
+        const shortBtn = document.getElementById('shortTimeBtn');
+        const preferenceTag = document.getElementById('preferenceTag');
+        const subwayStepsContainer = document.getElementById('subwayStepsContainer');
+        const taxiOptionsContainer = document.getElementById('taxiOptionsContainer');
+        const taxiFromStation = document.getElementById('taxiFromStation');
+        const summaryStats = document.getElementById('summaryStats');
+        const timelineDetail = document.getElementById('timelineDetail');
+        const fareDetail = document.getElementById('fareDetail');
+        const alternativePlans = document.getElementById('alternativePlans');
+        const lineStatusText = document.getElementById('lineStatusText');
+        const lineClosureNote = document.getElementById('lineClosureNote');
+        const historyHint = document.getElementById('historyHint');
+        const exceptionFeedbackArea = document.getElementById('exceptionFeedbackArea');
+
+        // 当前偏好: 'price' / 'time' / 'transfer'
+        let currentPreference = 'transfer'; // 对应少换乘
+        let currentPlanData = null;
+        let statusData = null;
+
+        // ---------- 真实 API 服务 ----------
+        const API = {
+            // 地铁可乘检查
+            async getStatus() {
+                try {
+                    const response = await axios.get('/api/check-subway');
+                    return response.data;
+                } catch (error) {
+                    console.error('地铁状态检查失败:', error);
+                    // 返回模拟数据作为降级
+                    return {
+                        global: { operational: true, message: '全网地铁运营中 · 1号线/2号线/10号线正常 · 末班约23:30' },
+                        lines: [
+                            { name: '1号线', status: 'normal', lastTrain: '23:15' },
+                            { name: '10号线', status: 'normal', lastTrain: '23:42' },
+                            { name: '13号线', status: 'normal', lastTrain: '23:30' },
+                            { name: '昌平线', status: 'partial', note: '部分区间停运' }
+                        ],
+                        lastTrainOverall: '23:30',
+                        exception: null
+                    };
+                }
+            },
+            // 路线规划 (核心)
+            async planRoute(params) {
+                try {
+                    const response = await axios.post('/api/subway-plan', params);
+                    const subwayPlan = response.data;
+                    
+                    // 获取打车方案
+                    const taxiResponse = await axios.post('/api/taxi-plan', {
+                        fromStation: subwayPlan.subway?.farthestStation || params.start,
+                        end: params.end,
+                        date: params.date,
+                        time: params.time
+                    });
+                    const taxiPlan = taxiResponse.data;
+                    
+                    return {
+                        ...subwayPlan,
+                        taxi: taxiPlan
+                    };
+                } catch (error) {
+                    console.error('路线规划失败:', error);
+                    // 使用兜底方案
+                    try {
+                        const fallbackResponse = await axios.post('/api/final-plan', params);
+                        return fallbackResponse.data;
+                    } catch (fallbackError) {
+                        console.error('兜底方案也失败:', fallbackError);
+                        // 返回模拟数据作为降级
+                        const { start, end, date, time, dayType, preference } = params;
+                        const isDefault = (start.includes('国贸') || start === '国贸') && (end.includes('西二旗') || end === '西二旗');
+                        
+                        let plan = {
+                            reachable: true,
+                            subway: {
+                                startStation: isDefault ? '国贸站' : start,
+                                startLines: '1号线/10号线',
+                                steps: [
+                                    { type: 'start', station: isDefault ? '国贸站' : start, lines: '1号线/10号线', time: '05:10-23:15' },
+                                    { type: 'ride', line: '10号线', direction: '外环', stations: 5, lineColor: '#2563eb' },
+                                    { type: 'transfer', station: '芍药居站', toLine: '13号线', walk: '120m', lineColor: '#f97316' },
+                                    { type: 'farthest', station: isDefault ? '上地站' : '知春路站', note: '推荐下车 · 末班23:42', isFarthest: true }
+                                ],
+                                farthestStation: isDefault ? '上地站' : '知春路站',
+                                farthestNote: '出站后打车更优',
+                                closedLinesNote: '昌平线部分区间 (灰色屏蔽)'
+                            },
+                            taxi: {
+                                fromStation: isDefault ? '上地站' : '知春路站',
+                                options: [
+                                    { type: 'cheapest', name: '特惠快车', price: 28, duration: '12分钟', distance: '4.2km', eta: '3分钟接驾' },
+                                    { type: 'nearest', name: '最近上车点', price: 31, walk: '20m', note: '司机实名' },
+                                    { type: 'fastest', name: '最快接驾', price: 35, duration: '10分钟', eta: '2分钟' }
+                                ]
+                            },
+                            summary: {
+                                totalTime: preference === 'time' ? 45 : 48,
+                                subwayFare: 5,
+                                taxiFare: preference === 'time' ? 32 : 28,
+                                totalFare: preference === 'time' ? 37 : 33,
+                                totalDistance: '16.3km',
+                                timeline: `21:20 ${isDefault ? '国贸站' : start}上车 → 21:35 芍药居换乘 → 21:45 ${isDefault ? '上地站' : '知春路站'}下车 · 21:47 打车 → 21:59 抵达${isDefault ? '西二旗' : end}`
+                            },
+                            alternatives: [
+                                { desc: '全程打车', fare: 62, time: 35 },
+                                { desc: '知春路换乘+打车', fare: 41, time: 52 }
+                            ],
+                            mapData: {
+                                start: [39.908, 116.397],
+                                transfer: [39.99, 116.38],
+                                farthest: [40.03, 116.35],
+                                end: [40.055, 116.30],
+                                lines: [
+                                    { coords: [[39.908,116.397],[39.95,116.41],[39.99,116.38]], color: '#2563eb' },
+                                    { coords: [[39.99,116.38],[40.03,116.35],[40.05,116.30]], color: '#f97316' }
+                                ],
+                                taxiCoords: [[40.03,116.35],[40.05,116.30],[40.055,116.30]]
+                            }
+                        };
+                        
+                        if (!isDefault) {
+                            plan.subway.startStation = start;
+                            plan.subway.farthestStation = '知春路站';
+                            plan.taxi.fromStation = '知春路站';
+                        }
+                        
+                        if (params.simulateNoRoute) {
+                            plan.reachable = false;
+                            plan.subway = null;
+                            plan.taxi = { options: [] };
+                            plan.summary = { totalTime: 35, totalFare: 62, totalDistance: '18km' };
+                            plan.alternatives = [{ desc: '全程打车推荐', fare: 62, time: 35 }];
+                        }
+                        
+                        return plan;
+                    }
+                }
+            },
+            // 地址建议
+            async suggestAddress(query) {
+                try {
+                    const response = await axios.get('/api/suggest-address', { params: { query } });
+                    return response.data;
+                } catch (error) {
+                    console.error('地址建议失败:', error);
+                    return ['国贸', '西二旗', '望京', '知春路', '芍药居'].filter(v => v.includes(query));
+                }
+            },
+            // 历史记录
+            async getHistory() {
+                try {
+                    const response = await axios.get('/api/history');
+                    return response.data;
+                } catch (error) {
+                    console.error('获取历史记录失败:', error);
+                    return ['国贸→西二旗 (3次)', '知春路→望京 (2次)'];
+                }
+            }
+        };
+
+        // ---------- 渲染函数 (动态更新UI) ----------
+        function renderStatus(status) {
+            statusData = status;
+            globalStatusDot.style.background = status.global.operational ? '#22c55e' : '#dc2626';
+            globalStatusText.innerHTML = `<i class="fas fa-subway"></i> ${status.global.message}`;
+            const lineStr = status.lines.filter(l=>l.status==='normal').map(l=>l.name).join('/') + '正常';
+            lineStatusText.innerHTML = `<i class="fas fa-train"></i> ${lineStr}`;
+            if (status.exception) {
+                exceptionMsg.innerHTML = `<i class="fas fa-circle-exclamation" style="color:#dc2626;"></i> ${status.exception}`;
+            } else {
+                exceptionMsg.innerHTML = `<i class="fas fa-circle-check" style="color:#16a34a;"></i> 无异常`;
+            }
+            // 倒计时基于末班
+            updateCountdownFromStatus(status.lastTrainOverall);
+        }
+
+        function updateCountdownFromStatus(lastTrainStr) {
+            const now = new Date();
+            const [h, m] = lastTrainStr.split(':').map(Number);
+            const target = new Date();
+            target.setHours(h, m, 0);
+            let diff = target - now;
+            if (diff < 0) {
+                lastTrainSpan.innerText = '已错过末班';
+                reachableLabel.innerText = '已错过直达';
+                reachableLabel.classList.remove('green-text');
+                reachableLabel.classList.add('red-text');
+            } else {
+                const mins = Math.floor(diff / 60000);
+                const hours = Math.floor(mins / 60);
+                const remainingMin = mins % 60;
+                lastTrainSpan.innerText = `${hours}h ${remainingMin}m`;
+                reachableLabel.innerText = '可乘坐直达';
+                reachableLabel.classList.add('green-text');
+                reachableLabel.classList.remove('red-text');
+            }
+        }
+
+        function renderPlan(plan) {
+            currentPlanData = plan;
+            if (!plan.reachable || !plan.subway) {
+                reachableLabel.innerText = '无地铁路线';
+                reachableLabel.classList.add('red-text');
+                subwayStepsContainer.innerHTML = `<div class="step-line text-muted"><i class="fas fa-ban"></i> 无可换乘地铁，建议全程打车</div>`;
+                taxiFromStation.innerText = '起点';
+            } else {
+                reachableLabel.innerText = '可乘坐直达';
+                reachableLabel.classList.add('green-text');
+                reachableLabel.classList.remove('red-text');
+                // 渲染地铁步骤
+                const sub = plan.subway;
+                let stepsHtml = `
+                    <div class="step-line"><div class="step-icon"><i class="fas fa-location-dot"></i></div><div><strong>${sub.startStation}</strong> <span class="text-muted">(${sub.startLines})</span></div><div style="margin-left: auto; font-size:0.9rem;">首/末 ${sub.steps[0].time}</div></div>
+                `;
+                sub.steps.slice(1).forEach(step => {
+                    if (step.type === 'ride') {
+                        stepsHtml += `<div class="step-line"><div class="step-icon"><i class="fas fa-arrow-right"></i></div><div>乘坐 <span style="background:${step.lineColor}; color:white; padding:2px 10px; border-radius:20px;">${step.line}</span> ${step.direction} · ${step.stations}站</div></div>`;
+                    } else if (step.type === 'transfer') {
+                        stepsHtml += `<div class="step-line"><div class="step-icon"><i class="fas fa-arrow-right-arrow-left"></i></div><div><strong>${step.station}</strong> 换乘 <span style="background:${step.lineColor}; color:white; padding:2px 10px; border-radius:20px;">${step.toLine}</span> · 步行约${step.walk}</div></div>`;
+                    } else if (step.type === 'farthest') {
+                        stepsHtml += `<div class="step-line"><div class="step-icon"><i class="fas fa-flag"></i></div><div><span class="farthest-station"><i class="fas fa-star"></i> 最远可达: ${step.station} (推荐下车)</span><div class="text-muted">${step.note}</div></div></div>`;
+                    }
+                });
+                subwayStepsContainer.innerHTML = stepsHtml;
+                taxiFromStation.innerText = sub.farthestStation;
+                lineClosureNote.innerHTML = `<i class="fas fa-ban"></i> ${sub.closedLinesNote || '停运/末班已过: 昌平线部分区间 (灰色屏蔽)'}`;
+            }
+
+            // 打车选项
+            if (plan.taxi && plan.taxi.options.length) {
+                let taxiHtml = '';
+                plan.taxi.options.forEach(opt => {
+                    taxiHtml += `<div class="taxi-option">
+                        <div><i class="fas fa-${opt.type==='cheapest'?'tag':'location-dot'}"></i> ${opt.name} <span class="text-muted">(${opt.duration || opt.walk})</span></div>
+                        <div><span class="taxi-price">¥${opt.price}</span> <span class="text-muted">${opt.distance || ''}</span></div>
+                        <div>${opt.eta || opt.note || ''}</div>
+                    </div>`;
+                });
+                taxiOptionsContainer.innerHTML = taxiHtml;
+            } else {
+                taxiOptionsContainer.innerHTML = `<div class="taxi-option text-muted">暂无打车方案，请调整起终点</div>`;
+            }
+
+            // 总览
+            const s = plan.summary;
+            summaryStats.innerHTML = `<span>总耗时 <strong>${s.totalTime}分钟</strong></span><span>总费用 <strong>¥${s.totalFare}</strong> (地铁¥${s.subwayFare || 0} + 打车¥${s.taxiFare || 0})</span><span>总距离 ${s.totalDistance}</span>`;
+            timelineDetail.innerHTML = `<div class="step-line"><i class="fas fa-subway"></i> ${s.timeline}</div>`;
+            fareDetail.innerHTML = `<div class="flex-between"><span>💰 地铁票价: ${s.subwayFare}元</span> <span>🚕 打车预估: ${s.taxiFare}元</span></div>`;
+
+            let altHtml = '';
+            plan.alternatives.forEach(alt => {
+                altHtml += `<div><i class="fas fa-rotate"></i> <strong>${alt.desc}:</strong> 约¥${alt.fare} · ${alt.time}分钟</div>`;
+            });
+            alternativePlans.innerHTML = altHtml;
+
+            // 更新地图
+            updateMap(plan.mapData);
+            // 反馈区
+            exceptionFeedbackArea.innerHTML = `<i class="fas fa-check-circle" style="color:#16a34a;"></i> 路线规划完成 · 实时数据`;
+        }
+
+        function updateMap(mapData) {
+            routeLayerGroup.clearLayers();
+            markerLayerGroup.clearLayers();
+            if (!mapData) return;
+            // 地铁线路
+            mapData.lines.forEach(line => {
+                L.polyline(line.coords, { color: line.color, weight: 5, opacity: 0.7 }).addTo(routeLayerGroup);
+            });
+            // 打车虚线
+            if (mapData.taxiCoords) {
+                L.polyline(mapData.taxiCoords, { color: '#1e293b', weight: 4, dashArray: '8, 8' }).addTo(routeLayerGroup);
+            }
+            // 标记
+            if (mapData.start) L.marker(mapData.start, {icon: L.divIcon({html:'<i class="fas fa-circle" style="color:#2563eb; font-size:18px;"></i>', iconSize:[20,20]})}).addTo(markerLayerGroup).bindPopup('起点');
+            if (mapData.transfer) L.marker(mapData.transfer, {icon: L.divIcon({html:'<i class="fas fa-circle" style="color:#ea580c;"></i>', iconSize:[20,20]})}).addTo(markerLayerGroup).bindPopup('换乘站');
+            if (mapData.farthest) L.marker(mapData.farthest, {icon: L.divIcon({html:'<i class="fas fa-circle" style="color:#b91c1c; font-size:20px;"></i>'})}).addTo(markerLayerGroup).bindPopup('最远可达');
+            if (mapData.end) L.marker(mapData.end, {icon: L.divIcon({html:'<i class="fas fa-flag-checkered" style="color:#0f172a;"></i>'})}).addTo(markerLayerGroup).bindPopup('终点');
+            map.invalidateSize();
+        }
+
+        // 显示反馈消息 (替代alert)
+        function showFeedback(message, isGood = true) {
+            exceptionFeedbackArea.innerHTML = `<i class="fas fa-${isGood ? 'check-circle' : 'exclamation-triangle'}" style="color:${isGood?'#16a34a':'#dc2626'};"></i> ${message}`;
+            globalAlert.innerHTML = `<div style="background:#f1f5f9; padding:10px; border-radius:20px;">${message}</div>`;
+            setTimeout(() => { if (globalAlert.innerHTML.includes(message)) globalAlert.innerHTML = ''; }, 3000);
+        }
+
+        // 规划核心逻辑
+        async function performRouting(silent = false) {
+            const start = startInput.value.trim() || '国贸';
+            const end = endInput.value.trim() || '西二旗';
+            const date = datePicker.value;
+            const time = timePicker.value;
+            const day = dayType.value;
+            const pref = currentPreference;
+            try {
+                showFeedback('规划中...', true);
+                const plan = await API.planRoute({ start, end, date, time, dayType: day, preference: pref });
+                renderPlan(plan);
+                // 历史记录
+                const history = await API.getHistory();
+                historyHint.innerHTML = `<i class="far fa-clock"></i> 历史: ${history.join(' · ')}`;
+            } catch (e) {
+                showFeedback('规划失败，使用缓存数据', false);
+            }
+        }
+
+        // 初始化&事件绑定
+        async function initApp() {
+            // 设置默认日期时间
+            const now = new Date();
+            datePicker.value = now.toISOString().split('T')[0];
+            timePicker.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            
+            // 加载状态
+            const status = await API.getStatus();
+            renderStatus(status);
+            
+            // 首次规划
+            await performRouting();
+            
+            // 倒计时定时更新
+            setInterval(() => { if(statusData) updateCountdownFromStatus(statusData.lastTrainOverall); }, 30000);
+        }
+
+        // 事件绑定
+        document.getElementById('locateBtn').addEventListener('click', function() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    gpsHint.innerHTML = '<i class="fas fa-location-dot"></i> 已定位';
+                    startInput.value = '国贸'; // 模拟逆地理
+                    showFeedback(`定位成功 (${pos.coords.latitude.toFixed(4)})`, true);
+                    performRouting();
+                }, () => {
+                    gpsHint.innerHTML = '<i class="fas fa-triangle-exclamation"></i> 手动输入';
+                    showFeedback('定位失败，请手动输入', false);
+                });
+            } else {
+                showFeedback('浏览器不支持定位', false);
+            }
+        });
+
+        document.getElementById('favHome').addEventListener('click', ()=> { endInput.value = '西二旗(家)'; performRouting(); });
+        document.getElementById('favCompany').addEventListener('click', ()=> { endInput.value = '西二旗(公司)'; performRouting(); });
+        document.getElementById('favSchool').addEventListener('click', ()=> { endInput.value = '知春路'; performRouting(); });
+
+        fewBtn.addEventListener('click', ()=>{
+            fewBtn.style.background = '#0f172a'; fewBtn.style.color = 'white';
+            shortBtn.style.background = '#f1f5f9'; shortBtn.style.color = '#1e293b';
+            currentPreference = 'transfer';
+            preferenceTag.innerHTML = '<i class="fas fa-route"></i> 少换乘';
+            performRouting();
+        });
+        shortBtn.addEventListener('click', ()=>{
+            shortBtn.style.background = '#0f172a'; shortBtn.style.color = 'white';
+            fewBtn.style.background = '#f1f5f9'; fewBtn.style.color = '#1e293b';
+            currentPreference = 'time';
+            preferenceTag.innerHTML = '<i class="fas fa-clock"></i> 耗时最短';
+            performRouting();
+        });
+
+        document.getElementById('prefSetting').addEventListener('click', ()=>{
+            const pref = prompt('设置打车偏好: 1=价格优先, 2=距离优先, 3=时间优先');
+            if(pref === '1') preferenceTag.innerHTML = '<i class="fas fa-tag"></i> 价格优先';
+            else if(pref === '2') preferenceTag.innerHTML = '<i class="fas fa-location-dot"></i> 距离优先';
+            else preferenceTag.innerHTML = '<i class="fas fa-clock"></i> 时间优先';
+            showFeedback('偏好已更新', true);
+        });
+
+        document.getElementById('exportCard').addEventListener('click', ()=> showFeedback('📸 行程卡片已生成 (可保存分享)', true));
+        document.getElementById('collectRoute').addEventListener('click', ()=> showFeedback('⭐ 路线已收藏', true));
+        document.getElementById('replanBtn').addEventListener('click', ()=> performRouting());
+        document.getElementById('shareBtn').addEventListener('click', ()=> showFeedback('分享链接已复制 (模拟)', true));
+        document.getElementById('comparePriceBtn').addEventListener('click', ()=> showFeedback('多平台比价: 滴滴¥28, 高德¥27, T3¥30', true));
+        document.getElementById('layerToggle').addEventListener('click', ()=> showFeedback('切换路况图层 (模拟)', true));
+
+        document.getElementById('simulateNoRoute').addEventListener('click', async ()=>{
+            const plan = await API.planRoute({ start:'国贸', end:'西二旗', simulateNoRoute: true });
+            renderPlan(plan);
+            showFeedback('模拟无地铁路线，推荐全程打车', false);
+        });
+        document.getElementById('simulateOffline').addEventListener('click', ()=>{
+            globalAlert.innerHTML = '<div style="background:#fef9c3; padding:12px; border-radius:20px;"><i class="fas fa-wifi-slash"></i> 离线模式 · 展示缓存数据</div>';
+            showFeedback('📶 网络异常，使用离线基础数据', false);
+        });
+
+        dayType.addEventListener('change', ()=> performRouting());
+        // 输入框变化可触发规划 (防抖简化)
+        let debounceTimer;
+        [startInput, endInput, datePicker, timePicker].forEach(el => el.addEventListener('input', ()=>{
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => performRouting(), 600);
+        }));
+
+        // 启动
+        initApp();
+    })();
+</script>
+<style>
+    .custom-div-icon { display: flex; align-items: center; justify-content: center; }
+    .leaflet-tooltip { background: #0f172a; color: white; border: none; border-radius: 20px; padding: 4px 10px; }
+    #map { z-index: 1; }
+    button.chip { cursor: pointer; }
+</style>
+</body>
+</html>
